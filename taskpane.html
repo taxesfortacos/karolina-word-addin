@@ -37,6 +37,9 @@
             <button class="btn btn-main btn-apply" onclick="applyPending()">Apply Pending</button>
             <button class="btn btn-main" onclick="clearApplied()">Clear Done</button>
         </div>
+        <div class="btn-row">
+            <button class="btn btn-main" style="background: #24282C;" onclick="applyBranding()">🎨 Apply Instead Branding</button>
+        </div>
         <div id="log"></div>
     </div>
     <script>
@@ -163,6 +166,44 @@
             items = items.filter(i => itemStates[i.id] === 'pending' || itemStates[i.id] === 'failed');
             renderItems();
             log('Cleared applied items');
+        }
+        
+        async function applyBranding() {
+            log('🎨 Applying Instead branding...');
+            await Word.run(async (context) => {
+                const body = context.document.body;
+                
+                // Step 1: Set ALL text to Lato, Charcoal
+                body.font.name = 'Lato';
+                body.font.color = '#24282C';
+                await context.sync();
+                log('✅ Body: Lato, Charcoal');
+                
+                // Step 2: Get all paragraphs and style headings differently
+                const paragraphs = body.paragraphs;
+                paragraphs.load('items,style');
+                await context.sync();
+                
+                let headingCount = 0;
+                for (let i = 0; i < paragraphs.items.length; i++) {
+                    const para = paragraphs.items[i];
+                    const style = para.style || '';
+                    
+                    // Check if it's a heading
+                    if (style.includes('Heading') || style.includes('heading')) {
+                        para.font.name = 'Baskerville';
+                        para.font.color = '#24282C';
+                        para.font.bold = false;
+                        headingCount++;
+                    }
+                }
+                await context.sync();
+                log('✅ Headings: Baskerville (' + headingCount + ' found)');
+                
+                log('🎨 Branding complete!');
+            }).catch(err => {
+                log('❌ Branding error: ' + err.message);
+            });
         }
     </script>
 </body>
