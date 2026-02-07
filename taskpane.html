@@ -6,87 +6,110 @@
     <title>Karolina Comments</title>
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; margin: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; margin: 0; }
         .container { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
-        h1 { font-size: 20px; color: #333; margin: 0 0 20px 0; }
-        .status { padding: 10px 15px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; }
+        h1 { font-size: 18px; color: #333; margin: 0 0 15px 0; }
+        .status { padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
         .status.connected { background: #d4edda; color: #155724; }
-        .pending-item { background: #f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #667eea; }
-        .btn { background: #667eea; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; width: 100%; margin-top: 10px; }
+        .pending-item { background: #f8f9fa; padding: 10px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #667eea; font-size: 13px; }
+        .pending-item .type { font-size: 11px; color: #667eea; font-weight: 600; margin-bottom: 4px; }
+        .btn { background: #667eea; color: white; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; width: 100%; margin-top: 8px; font-size: 14px; }
         .btn:disabled { background: #ccc; }
-        #log { margin-top: 15px; font-size: 11px; color: #666; max-height: 100px; overflow-y: auto; }
+        .btn.secondary { background: #28a745; }
+        #log { margin-top: 12px; font-size: 10px; color: #666; max-height: 80px; overflow-y: auto; background: #f9f9f9; padding: 8px; border-radius: 4px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🤖 Karolina Comments</h1>
+        <h1>🤖 Karolina</h1>
         <div id="status" class="status">Connecting...</div>
         <div id="pendingList"></div>
-        <button class="btn" onclick="processComments()" id="processBtn" disabled>Insert All Comments</button>
+        <button class="btn" onclick="processAll()" id="processBtn" disabled>Apply All Suggestions</button>
         <div id="log"></div>
     </div>
     <script>
         const GIST_URL = 'https://gist.githubusercontent.com/taxesfortacos/141fe561464485dce58ad05f8c9b180c/raw/comments.json';
-        let pendingComments = [];
+        let pendingItems = [];
         
-        function log(msg) { document.getElementById('log').innerHTML = msg + '<br>' + document.getElementById('log').innerHTML; }
+        function log(msg) { 
+            const l = document.getElementById('log');
+            l.innerHTML = new Date().toLocaleTimeString() + ': ' + msg + '<br>' + l.innerHTML; 
+        }
         
         Office.onReady((info) => {
             if (info.host === Office.HostType.Word) {
                 document.getElementById('status').className = 'status connected';
-                document.getElementById('status').textContent = '✅ Connected - Polling every 5s...';
-                pollForComments();
-                setInterval(pollForComments, 5000);
+                document.getElementById('status').textContent = '✅ Connected - Listening for suggestions...';
+                pollForItems();
+                setInterval(pollForItems, 5000);
             }
         });
         
-        async function pollForComments() {
+        async function pollForItems() {
             try {
-                const response = await fetch(GIST_URL + '?nocache=' + Date.now());
-                const text = await response.text();
-                log('Raw: ' + text.substring(0, 50) + '...');
-                const data = JSON.parse(text);
-                pendingComments = (data.comments || []).filter(c => c.status === 'pending');
+                const response = await fetch(GIST_URL + '?t=' + Date.now());
+                const data = await response.json();
+                pendingItems = (data.comments || []).filter(c => c.status === 'pending');
                 
-                if (pendingComments.length > 0) {
-                    document.getElementById('pendingList').innerHTML = pendingComments.map(c => 
-                        '<div class="pending-item"><b>"' + c.searchText + '"</b><br>💬 ' + c.comment + '</div>'
-                    ).join('');
+                if (pendingItems.length > 0) {
+                    document.getElementById('pendingList').innerHTML = pendingItems.map(c => {
+                        const isSuggestion = c.type === 'suggestion' || c.newText;
+                        return '<div class="pending-item">' +
+                            '<div class="type">' + (isSuggestion ? '✏️ SUGGESTION' : '💬 COMMENT') + '</div>' +
+                            '<b>"' + c.searchText + '"</b>' +
+                            (c.newText ? '<br>→ "' + c.newText + '"' : '') +
+                            (c.comment ? '<br><i>' + c.comment + '</i>' : '') +
+                            '</div>';
+                    }).join('');
                     document.getElementById('processBtn').disabled = false;
                 } else {
-                    document.getElementById('pendingList').innerHTML = '<p style="color:#888">No pending comments</p>';
+                    document.getElementById('pendingList').innerHTML = '<p style="color:#888;font-size:13px">No pending suggestions. Tell Karolina what to change!</p>';
+                    document.getElementById('processBtn').disabled = true;
                 }
             } catch (err) {
-                log('Error: ' + err.message);
+                log('Poll error: ' + err.message);
             }
         }
         
-        async function processComments() {
+        async function processAll() {
             document.getElementById('processBtn').disabled = true;
-            document.getElementById('processBtn').textContent = 'Processing...';
+            document.getElementById('processBtn').textContent = 'Applying...';
             
-            for (const c of pendingComments) {
-                try {
-                    await Word.run(async (context) => {
-                        const results = context.document.body.search(c.searchText, { matchCase: false });
+            await Word.run(async (context) => {
+                // Enable Track Changes so edits show as suggestions
+                context.document.changeTrackingMode = Word.ChangeTrackingMode.trackAll;
+                
+                for (const item of pendingItems) {
+                    try {
+                        const results = context.document.body.search(item.searchText, { matchCase: false });
                         results.load('items');
                         await context.sync();
+                        
                         if (results.items.length > 0) {
-                            results.items[0].insertComment(c.comment);
+                            const range = results.items[0];
+                            
+                            if (item.newText !== undefined) {
+                                // This is a suggestion - replace text (will show as tracked change)
+                                range.insertText(item.newText, Word.InsertLocation.replace);
+                                log('✏️ Suggested: "' + item.searchText + '" → "' + item.newText + '"');
+                            } else if (item.comment) {
+                                // This is a comment
+                                range.insertComment(item.comment);
+                                log('💬 Comment added for: ' + item.searchText);
+                            }
                             await context.sync();
-                            log('✅ Added comment for: ' + c.searchText);
                         } else {
-                            log('❌ Text not found: ' + c.searchText);
+                            log('❌ Not found: ' + item.searchText);
                         }
-                    });
-                } catch (err) {
-                    log('Error: ' + err.message);
+                    } catch (err) {
+                        log('Error: ' + err.message);
+                    }
                 }
-            }
+            });
             
-            document.getElementById('pendingList').innerHTML = '<p style="color:green">✅ All comments inserted!</p>';
-            document.getElementById('processBtn').textContent = 'Insert All Comments';
-            pendingComments = [];
+            document.getElementById('pendingList').innerHTML = '<p style="color:green">✅ All suggestions applied!</p>';
+            document.getElementById('processBtn').textContent = 'Apply All Suggestions';
+            pendingItems = [];
         }
     </script>
 </body>
