@@ -12,6 +12,7 @@
         .item { background: #f8f9fa; padding: 10px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #667eea; font-size: 11px; }
         .item.applied { border-left-color: #28a745; opacity: 0.6; }
         .item.failed { border-left-color: #dc3545; }
+        .item.heading { border-left-color: #ff9800; background: #fff8e1; }
         .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
         .item-text { font-weight: 600; }
         .item-comment { color: #666; font-size: 10px; }
@@ -79,12 +80,26 @@
         function renderItems() {
             document.getElementById('itemList').innerHTML = items.map(item => {
                 const state = itemStates[item.id] || 'pending';
-                return '<div class="item ' + state + '">' +
+                let actionText = '';
+                let icon = '💬';
+                
+                if (item.type === 'heading') {
+                    icon = '📑';
+                    actionText = 'Heading ' + item.level;
+                } else if (item.type === 'suggestion' || item.newText !== undefined) {
+                    icon = '✏️';
+                    actionText = '→ ' + item.newText;
+                } else {
+                    actionText = item.comment;
+                }
+                
+                const typeClass = item.type === 'heading' ? ' heading' : '';
+                return '<div class="item ' + state + typeClass + '">' +
                     '<div class="item-header">' +
-                        '<span class="item-text">"' + item.searchText + '"</span>' +
+                        '<span class="item-text">"' + item.searchText.substring(0, 40) + (item.searchText.length > 40 ? '...' : '') + '"</span>' +
                         '<span class="item-status ' + state + '">' + state + '</span>' +
                     '</div>' +
-                    '<div class="item-comment">💬 ' + (item.comment || '→ ' + item.newText) + '</div>' +
+                    '<div class="item-comment">' + icon + ' ' + actionText + '</div>' +
                     (state === 'pending' ? '<button class="btn" onclick="applyOne(' + item.id + ')">Apply</button>' : '') +
                 '</div>';
             }).join('');
@@ -101,18 +116,37 @@
                 await context.sync();
                 
                 if (results.items.length > 0) {
-                    if (item.newText !== undefined) {
-                        results.items[0].insertText(item.newText, Word.InsertLocation.replace);
-                    } else if (item.comment) {
-                        results.items[0].insertComment(item.comment);
+                    const range = results.items[0];
+                    
+                    if (item.type === 'heading' && item.level) {
+                        // Apply heading style - need to get the paragraph containing this text
+                        const para = range.paragraphs.getFirst();
+                        para.load('style');
+                        await context.sync();
+                        
+                        const headingStyle = 'Heading ' + item.level;
+                        para.style = headingStyle;
+                        await context.sync();
+                        itemStates[id] = 'applied';
+                        log('✅ H' + item.level + ': ' + item.searchText.substring(0, 30));
+                    } else if (item.type === 'suggestion' || item.newText !== undefined) {
+                        range.insertText(item.newText, Word.InsertLocation.replace);
+                        await context.sync();
+                        itemStates[id] = 'applied';
+                        log('✅ ' + item.searchText.substring(0, 30));
+                    } else if (item.type === 'comment' || item.comment) {
+                        range.insertComment(item.comment);
+                        await context.sync();
+                        itemStates[id] = 'applied';
+                        log('✅ 💬 ' + item.searchText.substring(0, 30));
                     }
-                    await context.sync();
-                    itemStates[id] = 'applied';
-                    log('✅ ' + item.searchText);
                 } else {
                     itemStates[id] = 'failed';
-                    log('❌ Not found: ' + item.searchText);
+                    log('❌ Not found: ' + item.searchText.substring(0, 30));
                 }
+            }).catch(err => {
+                itemStates[id] = 'failed';
+                log('❌ Error: ' + err.message);
             });
             renderItems();
         }
