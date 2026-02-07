@@ -10,17 +10,17 @@
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Karolina"/>
   <Description DefaultValue="AI comment assistant"/>
-  <IconUrl DefaultValue="https://club-collect-dave-you.trycloudflare.com/icon-32.png"/>
-  <HighResolutionIconUrl DefaultValue="https://club-collect-dave-you.trycloudflare.com/icon-64.png"/>
+  <IconUrl DefaultValue="https://taxesfortacos.github.io/karolina-word-addin/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://taxesfortacos.github.io/karolina-word-addin/icon-64.png"/>
   <SupportUrl DefaultValue="https://openclaw.ai"/>
   <AppDomains>
-    <AppDomain>https://club-collect-dave-you.trycloudflare.com</AppDomain>
+    <AppDomain>https://taxesfortacos.github.io/karolina-word-addin</AppDomain>
   </AppDomains>
   <Hosts>
     <Host Name="Document"/>
   </Hosts>
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://club-collect-dave-you.trycloudflare.com/taskpane.html"/>
+    <SourceLocation DefaultValue="https://taxesfortacos.github.io/karolina-word-addin/taskpane.html"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
 </OfficeApp>
