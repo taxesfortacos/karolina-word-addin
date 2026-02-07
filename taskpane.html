@@ -6,27 +6,42 @@
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; margin: 0; }
-        .container { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
-        h1 { font-size: 18px; margin: 0 0 15px 0; }
-        .status { padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; background: #d4edda; color: #155724; }
-        .pending-item { background: #f8f9fa; padding: 10px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #667eea; font-size: 12px; }
-        .btn { background: #667eea; color: white; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; width: 100%; margin-top: 8px; }
+        .container { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+        h1 { font-size: 16px; margin: 0 0 10px 0; }
+        .status { padding: 6px 10px; border-radius: 6px; margin-bottom: 10px; font-size: 12px; background: #d4edda; color: #155724; }
+        .item { background: #f8f9fa; padding: 10px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #667eea; font-size: 11px; }
+        .item.applied { border-left-color: #28a745; opacity: 0.6; }
+        .item.failed { border-left-color: #dc3545; }
+        .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+        .item-text { font-weight: 600; }
+        .item-comment { color: #666; font-size: 10px; }
+        .item-status { font-size: 10px; padding: 2px 6px; border-radius: 4px; }
+        .item-status.pending { background: #fff3cd; color: #856404; }
+        .item-status.applied { background: #d4edda; color: #155724; }
+        .item-status.failed { background: #f8d7da; color: #721c24; }
+        .btn { background: #667eea; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 10px; }
         .btn:disabled { background: #ccc; }
-        #log { margin-top: 12px; font-size: 10px; color: #666; max-height: 80px; overflow-y: auto; background: #f9f9f9; padding: 8px; border-radius: 4px; }
+        .btn-apply { background: #28a745; }
+        .btn-row { display: flex; gap: 5px; margin-top: 10px; }
+        .btn-main { flex: 1; padding: 10px; font-size: 12px; }
+        #log { margin-top: 10px; font-size: 9px; color: #666; max-height: 60px; overflow-y: auto; background: #f9f9f9; padding: 6px; border-radius: 4px; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🤖 Karolina</h1>
         <div id="status" class="status">Connecting...</div>
-        <div id="pendingList"></div>
-        <button class="btn" onclick="processAll()" id="processBtn" disabled>Apply All</button>
+        <div id="itemList"></div>
+        <div class="btn-row">
+            <button class="btn btn-main btn-apply" onclick="applyPending()">Apply Pending</button>
+            <button class="btn btn-main" onclick="clearApplied()">Clear Done</button>
+        </div>
         <div id="log"></div>
     </div>
     <script>
-        // Use GitHub API instead of raw (no caching)
         const GIST_API = 'https://api.github.com/gists/141fe561464485dce58ad05f8c9b180c';
-        let pendingItems = [];
+        let items = [];
+        let itemStates = {}; // Track: pending, applied, failed
         
         function log(msg) { 
             document.getElementById('log').innerHTML = msg + '<br>' + document.getElementById('log').innerHTML; 
@@ -34,73 +49,87 @@
         
         Office.onReady((info) => {
             if (info.host === Office.HostType.Word) {
-                document.getElementById('status').textContent = '✅ Connected - Polling...';
-                pollForItems();
-                setInterval(pollForItems, 5000);
+                document.getElementById('status').textContent = '✅ Connected';
+                loadItems();
+                setInterval(loadItems, 10000);
             }
         });
         
-        async function pollForItems() {
+        async function loadItems() {
             try {
-                const response = await fetch(GIST_API, {
-                    headers: { 'Accept': 'application/vnd.github.v3+json' }
-                });
+                const response = await fetch(GIST_API, { headers: { 'Accept': 'application/vnd.github.v3+json' } });
                 const gist = await response.json();
-                const content = gist.files['comments.json'].content;
-                const data = JSON.parse(content);
-                pendingItems = (data.comments || []).filter(c => c.status === 'pending');
+                const data = JSON.parse(gist.files['comments.json'].content);
                 
-                document.getElementById('status').textContent = '✅ Connected - ' + pendingItems.length + ' pending';
+                // Merge with existing states
+                items = data.comments || [];
+                items.forEach(item => {
+                    if (!itemStates[item.id]) itemStates[item.id] = 'pending';
+                });
                 
-                if (pendingItems.length > 0) {
-                    document.getElementById('pendingList').innerHTML = pendingItems.map(c => 
-                        '<div class="pending-item"><b>"' + c.searchText + '"</b><br>💬 ' + (c.comment || c.newText) + '</div>'
-                    ).join('');
-                    document.getElementById('processBtn').disabled = false;
-                } else {
-                    document.getElementById('pendingList').innerHTML = '<p style="color:#888">No pending items</p>';
-                    document.getElementById('processBtn').disabled = true;
-                }
+                renderItems();
+                
+                const pending = items.filter(i => itemStates[i.id] === 'pending').length;
+                document.getElementById('status').textContent = '✅ ' + pending + ' pending, ' + (items.length - pending) + ' done';
             } catch (err) {
-                log('Error: ' + err.message);
+                log('Load error: ' + err.message);
             }
         }
         
-        async function processAll() {
-            document.getElementById('processBtn').disabled = true;
-            document.getElementById('processBtn').textContent = 'Applying...';
+        function renderItems() {
+            document.getElementById('itemList').innerHTML = items.map(item => {
+                const state = itemStates[item.id] || 'pending';
+                return '<div class="item ' + state + '">' +
+                    '<div class="item-header">' +
+                        '<span class="item-text">"' + item.searchText + '"</span>' +
+                        '<span class="item-status ' + state + '">' + state + '</span>' +
+                    '</div>' +
+                    '<div class="item-comment">💬 ' + (item.comment || '→ ' + item.newText) + '</div>' +
+                    (state === 'pending' ? '<button class="btn" onclick="applyOne(' + item.id + ')">Apply</button>' : '') +
+                '</div>';
+            }).join('');
+        }
+        
+        async function applyOne(id) {
+            const item = items.find(i => i.id === id);
+            if (!item) return;
             
             await Word.run(async (context) => {
                 context.document.changeTrackingMode = Word.ChangeTrackingMode.trackAll;
+                const results = context.document.body.search(item.searchText, { matchCase: false });
+                results.load('items');
+                await context.sync();
                 
-                for (const item of pendingItems) {
-                    try {
-                        const results = context.document.body.search(item.searchText, { matchCase: false });
-                        results.load('items');
-                        await context.sync();
-                        
-                        if (results.items.length > 0) {
-                            if (item.newText !== undefined) {
-                                results.items[0].insertText(item.newText, Word.InsertLocation.replace);
-                            } else if (item.comment) {
-                                results.items[0].insertComment(item.comment);
-                            }
-                            await context.sync();
-                            log('✅ ' + item.searchText);
-                        } else {
-                            log('❌ Not found: ' + item.searchText);
-                        }
-                    } catch (err) {
-                        log('Error: ' + err.message);
+                if (results.items.length > 0) {
+                    if (item.newText !== undefined) {
+                        results.items[0].insertText(item.newText, Word.InsertLocation.replace);
+                    } else if (item.comment) {
+                        results.items[0].insertComment(item.comment);
                     }
+                    await context.sync();
+                    itemStates[id] = 'applied';
+                    log('✅ ' + item.searchText);
+                } else {
+                    itemStates[id] = 'failed';
+                    log('❌ Not found: ' + item.searchText);
                 }
             });
-            
-            document.getElementById('pendingList').innerHTML = '<p style="color:green">✅ Done! Tell Karolina "applied"</p>';
-            document.getElementById('processBtn').textContent = 'Apply All';
-            pendingItems = [];
+            renderItems();
+        }
+        
+        async function applyPending() {
+            for (const item of items) {
+                if (itemStates[item.id] === 'pending') {
+                    await applyOne(item.id);
+                }
+            }
+        }
+        
+        function clearApplied() {
+            items = items.filter(i => itemStates[i.id] === 'pending' || itemStates[i.id] === 'failed');
+            renderItems();
+            log('Cleared applied items');
         }
     </script>
 </body>
 </html>
-<!-- deploy 1770506178 -->
