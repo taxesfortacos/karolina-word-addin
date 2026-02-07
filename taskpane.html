@@ -4,147 +4,185 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Karolina Comments</title>
-    
-    <!-- Office JS -->
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             padding: 20px;
-            background: #f5f5f5;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
         }
         h1 {
-            font-size: 18px;
+            font-size: 20px;
             color: #333;
-            margin-bottom: 20px;
+            margin: 0 0 20px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-        .comment-form {
-            background: white;
-            padding: 15px;
+        .status {
+            padding: 10px 15px;
             border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 500;
-            color: #555;
-        }
-        input, textarea {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
             margin-bottom: 15px;
-            box-sizing: border-box;
+            font-size: 14px;
         }
-        textarea {
-            height: 100px;
-            resize: vertical;
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.waiting { background: #fff3cd; color: #856404; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .pending-list {
+            margin-top: 15px;
         }
-        button {
-            background: #0078d4;
+        .pending-item {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+        }
+        .pending-item .search { font-weight: 600; color: #333; }
+        .pending-item .comment { color: #666; margin-top: 5px; }
+        .btn {
+            background: #667eea;
             color: white;
             border: none;
-            padding: 12px 20px;
-            border-radius: 4px;
+            padding: 10px 20px;
+            border-radius: 6px;
             cursor: pointer;
             font-size: 14px;
             width: 100%;
+            margin-top: 10px;
         }
-        button:hover {
-            background: #106ebe;
-        }
-        #status {
+        .btn:hover { background: #5a6fd6; }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+        #log {
             margin-top: 15px;
             padding: 10px;
-            border-radius: 4px;
-            display: none;
-        }
-        .success { background: #dff6dd; color: #107c10; display: block !important; }
-        .error { background: #fde7e9; color: #a80000; display: block !important; }
-        
-        .pending-comments {
-            margin-top: 20px;
-        }
-        .pending-item {
-            background: white;
-            padding: 10px;
-            border-radius: 4px;
-            margin-bottom: 10px;
-            border-left: 3px solid #0078d4;
+            background: #f1f1f1;
+            border-radius: 6px;
+            font-size: 12px;
+            max-height: 150px;
+            overflow-y: auto;
         }
     </style>
 </head>
 <body>
-    <h1>🤖 Karolina Comments</h1>
-    
-    <div class="comment-form">
-        <label for="searchText">Text to find:</label>
-        <input type="text" id="searchText" placeholder="Enter text to search for...">
+    <div class="container">
+        <h1>🤖 Karolina Comments</h1>
         
-        <label for="commentText">Comment:</label>
-        <textarea id="commentText" placeholder="Enter your comment..."></textarea>
+        <div id="status" class="status waiting">
+            Connecting to Karolina...
+        </div>
         
-        <button onclick="addComment()">Add Inline Comment</button>
+        <div id="pendingSection" style="display:none;">
+            <strong>Pending Comments:</strong>
+            <div id="pendingList" class="pending-list"></div>
+        </div>
         
-        <div id="status"></div>
-    </div>
-    
-    <div class="pending-comments" id="pendingComments">
-        <!-- Pending comments from Karolina will appear here -->
+        <button class="btn" onclick="processComments()" id="processBtn" disabled>
+            Process All Comments
+        </button>
+        
+        <div id="log"></div>
     </div>
 
     <script>
+        const API_BASE = 'https://karolina-word-addin.vercel.app/api';
+        let docId = 'default';
+        let pendingComments = [];
+        
+        function log(msg) {
+            const logDiv = document.getElementById('log');
+            logDiv.innerHTML = `${new Date().toLocaleTimeString()}: ${msg}<br>` + logDiv.innerHTML;
+        }
+        
         Office.onReady((info) => {
             if (info.host === Office.HostType.Word) {
-                console.log("Office.js is ready in Word!");
-                // Could connect to Karolina's API here to fetch pending comments
+                log('Connected to Word!');
+                document.getElementById('status').className = 'status connected';
+                document.getElementById('status').textContent = '✅ Connected to Word - Listening for comments from Karolina';
+                
+                // Start polling for comments
+                pollForComments();
+                setInterval(pollForComments, 5000); // Poll every 5 seconds
+            } else {
+                document.getElementById('status').className = 'status error';
+                document.getElementById('status').textContent = '❌ Not connected to Word';
             }
         });
-
-        async function addComment() {
-            const searchText = document.getElementById('searchText').value;
-            const commentText = document.getElementById('commentText').value;
-            const status = document.getElementById('status');
-            
-            if (!searchText || !commentText) {
-                status.textContent = 'Please fill in both fields';
-                status.className = 'error';
-                return;
-            }
-
+        
+        async function pollForComments() {
             try {
-                await Word.run(async (context) => {
-                    // Search for the text
-                    const results = context.document.body.search(searchText, { matchCase: false });
-                    results.load('items');
-                    await context.sync();
-
-                    if (results.items.length === 0) {
-                        status.textContent = `Text "${searchText}" not found in document`;
-                        status.className = 'error';
-                        return;
-                    }
-
-                    // Add comment to the first match
-                    const range = results.items[0];
-                    range.insertComment(commentText);
-                    await context.sync();
-
-                    status.textContent = `✅ Comment added to "${searchText}"`;
-                    status.className = 'success';
-                    
-                    // Clear form
-                    document.getElementById('searchText').value = '';
-                    document.getElementById('commentText').value = '';
-                });
-            } catch (error) {
-                status.textContent = `Error: ${error.message}`;
-                status.className = 'error';
-                console.error(error);
+                const response = await fetch(`${API_BASE}/comments?docId=${docId}`);
+                const data = await response.json();
+                
+                if (data.comments && data.comments.length > 0) {
+                    pendingComments = data.comments;
+                    renderPendingComments();
+                    document.getElementById('pendingSection').style.display = 'block';
+                    document.getElementById('processBtn').disabled = false;
+                    log(`Found ${data.comments.length} pending comment(s)`);
+                }
+            } catch (err) {
+                log(`Poll error: ${err.message}`);
             }
+        }
+        
+        function renderPendingComments() {
+            const list = document.getElementById('pendingList');
+            list.innerHTML = pendingComments.map(c => `
+                <div class="pending-item">
+                    <div class="search">📍 "${c.searchText}"</div>
+                    <div class="comment">💬 ${c.comment}</div>
+                </div>
+            `).join('');
+        }
+        
+        async function processComments() {
+            document.getElementById('processBtn').disabled = true;
+            document.getElementById('processBtn').textContent = 'Processing...';
+            
+            for (const comment of pendingComments) {
+                try {
+                    await insertComment(comment.searchText, comment.comment);
+                    log(`✅ Added comment for "${comment.searchText}"`);
+                    
+                    // Acknowledge the comment
+                    await fetch(`${API_BASE}/comments/ack`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ docId, commentId: comment.id })
+                    });
+                } catch (err) {
+                    log(`❌ Error: ${err.message}`);
+                }
+            }
+            
+            pendingComments = [];
+            document.getElementById('pendingSection').style.display = 'none';
+            document.getElementById('processBtn').textContent = 'Process All Comments';
+            document.getElementById('processBtn').disabled = true;
+        }
+        
+        async function insertComment(searchText, commentText) {
+            return Word.run(async (context) => {
+                const results = context.document.body.search(searchText, { matchCase: false });
+                results.load('items');
+                await context.sync();
+                
+                if (results.items.length === 0) {
+                    throw new Error(`Text "${searchText}" not found`);
+                }
+                
+                results.items[0].insertComment(commentText);
+                await context.sync();
+            });
         }
     </script>
 </body>

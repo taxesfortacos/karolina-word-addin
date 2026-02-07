@@ -1,0 +1,10 @@
+name = "karolina-comments-api"
+main = "worker.js"
+compatibility_date = "2026-02-01"
+
+[vars]
+ENVIRONMENT = "production"
+
+[[kv_namespaces]]
+binding = "COMMENTS_KV"
+id = "placeholder"
